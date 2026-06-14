@@ -5,7 +5,7 @@ title: Scoring System
 
 # Scoring System
 
-After fetching content from all sources, Horizon uses an AI model to score each item on a 0-10 scale. This determines what appears in the daily summary.
+After fetching content from all sources, Horizon uses an AI model to score each item on a 0-10 scale. The default scoring prompt is tuned for a focused AI/ML daily digest, not a general technology digest.
 
 ## Pipeline
 
@@ -19,18 +19,19 @@ After fetching content from all sources, Horizon uses an AI model to score each 
 
 | Score | Tier | Description |
 |-------|------|-------------|
-| 9-10 | Groundbreaking | Major breakthroughs, paradigm shifts, major version releases, significant research breakthroughs |
-| 7-8 | High Value | Important developments, technical deep-dives, novel approaches, insightful analysis, valuable tools |
-| 5-6 | Interesting | Incremental improvements, useful tutorials, moderate community interest |
-| 3-4 | Low Priority | Minor updates, common knowledge, overly promotional |
-| 0-2 | Noise | Spam, off-topic, trivial updates |
+| 9-10 | Groundbreaking AI | Major AI breakthroughs, model releases, capability jumps, or industry-changing AI announcements |
+| 7-8 | High Value AI | Important AI research, AI engineering deep-dives, AI tools, datasets, benchmarks, or infrastructure |
+| 5-6 | Related but Not Essential | Incremental AI updates, useful AI tutorials, or AI-adjacent infrastructure |
+| 3-4 | Low Priority | Weak AI relevance, routine AI updates, or general technical content with only a loose AI mention |
+| 0-2 | Noise | Spam, off-topic, trivial updates, or general technology content with no direct AI/ML relevance |
 
 ## Scoring Factors
 
 The AI evaluates each item based on:
 
-- **Technical depth and novelty** — original ideas, new techniques, research contributions
-- **Potential impact** — how broadly this affects software engineering, AI/ML, or systems research
+- **AI relevance first** — non-AI items should rarely score above 4
+- **Technical depth and novelty in AI/ML** — original ideas, new techniques, research contributions
+- **Potential impact** — how broadly this affects AI builders, researchers, products, or users
 - **Quality of writing/presentation** — clarity, structure, thoroughness
 - **Community discussion** — insightful comments, diverse viewpoints, substantive debates
 - **Engagement signals** — high upvotes/favorites paired with substantive discussion (not just raw numbers)
@@ -39,12 +40,12 @@ Engagement metadata is source-specific: HN provides score and comment count, Red
 
 ## Filtering
 
-After scoring, items are filtered by `filtering.ai_score_threshold` (default: `7.0`) and sorted by score descending. Optional balanced digest quotas are then applied before enrichment.
+After scoring, items are filtered by `filtering.ai_score_threshold` (default: `5.0`) and sorted by score descending. Optional balanced digest quotas are then applied before enrichment.
 
 ```json
 {
   "filtering": {
-    "ai_score_threshold": 7.0,
+    "ai_score_threshold": 5.0,
     "time_window_hours": 24,
     "max_items": 20,
     "category_groups": {
@@ -68,7 +69,7 @@ Items scoring 9.0 or above are featured in the "Today's Highlights" section of t
 Items that pass the score threshold and any balanced digest limits go through a second AI pass for enrichment (`src/ai/enricher.py`):
 
 1. **Concept extraction** — AI identifies 1-3 technical concepts in the item that may need explanation.
-2. **Web search** — Each concept is searched via DuckDuckGo to gather grounding context.
+2. **Web search** — Each concept is searched via the configured provider (`duckduckgo` by default, or `serper`) to gather grounding context.
 3. **Structured analysis** — The item content and search results are sent to AI, which produces:
    - `whats_new` — what specifically happened or changed
    - `why_it_matters` — significance and impact

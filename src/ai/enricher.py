@@ -1,16 +1,18 @@
 """Content enrichment using AI (second-pass analysis).
 
 For items that pass the score threshold, this module:
-1. Searches the web for relevant context (via DuckDuckGo)
+1. Searches the web for relevant context (via DuckDuckGo or Serper)
 2. Feeds search results + item content to AI to generate grounded background knowledge
 """
 
 import asyncio
 import json
+import logging
 import re
 import sys
 import os
 from typing import List, Optional
+import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, MofNCompleteColumn
 from ddgs import DDGS
@@ -23,18 +25,27 @@ from .prompts import (
 from .utils import parse_json_response
 from ..models import ContentItem
 
+logger = logging.getLogger(__name__)
+
 
 class ContentEnricher:
     """Enriches high-scoring content items with background knowledge."""
 
-    def __init__(self, ai_client: AIClient):
+    def __init__(self, ai_client: AIClient, search_client: Optional[httpx.AsyncClient] = None):
         self.client = ai_client
+        self.search_client = search_client
 
     def _get_concurrency(self) -> int:
         """Return the configured enrichment concurrency, clamped to 1 or above."""
         config = getattr(self.client, "config", None)
         concurrency = getattr(config, "enrichment_concurrency", 1)
         return max(concurrency, 1)
+
+    def _get_search_max_results(self, default: int = 3) -> int:
+        """Return configured search result count, clamped to 1 or above."""
+        config = getattr(self.client, "config", None)
+        max_results = getattr(config, "search_max_results", default)
+        return max(int(max_results or default), 1)
 
     async def enrich_batch(self, items: List[ContentItem]) -> None:
         """Enrich items in-place with background knowledge.
@@ -68,11 +79,27 @@ class ContentEnricher:
             await asyncio.gather(*coros)
 
     async def _web_search(self, query: str, max_results: int = 3) -> list:
-        """Search the web for context via DuckDuckGo.
+        """Search the web for context via the configured provider.
 
         Returns:
             List of dicts with keys: title, url, body
         """
+        config = getattr(self.client, "config", None)
+        provider = str(getattr(config, "search_provider", "duckduckgo") or "duckduckgo").lower()
+        max_results = self._get_search_max_results(max_results)
+
+        if provider == "serper":
+            return await self._serper_search(query, max_results=max_results)
+
+        if provider not in ("duckduckgo", "ddg"):
+            logger.warning(
+                f"Unknown search provider '{provider}', falling back to DuckDuckGo."
+            )
+
+        return await self._duckduckgo_search(query, max_results=max_results)
+
+    async def _duckduckgo_search(self, query: str, max_results: int = 3) -> list:
+        """Search the web for context via DuckDuckGo."""
         try:
             # Suppress primp "Impersonate ... does not exist" stderr warning
             stderr = sys.stderr
@@ -90,6 +117,67 @@ class ContentEnricher:
             {"title": r.get("title", ""), "url": r.get("href", ""), "body": r.get("body", "")}
             for r in (results or [])
         ]
+
+    async def _serper_search(self, query: str, max_results: int = 3) -> list:
+        """Search the web for context via Serper's Google Search API."""
+        config = getattr(self.client, "config", None)
+        key_env = getattr(config, "serper_api_key_env", "SERPER_API_KEY")
+        api_key = os.environ.get(key_env)
+        if not api_key:
+            logger.warning(
+                f"Serper API key not found in env var '{key_env}', falling back to DuckDuckGo."
+            )
+            return await self._duckduckgo_search(query, max_results=max_results)
+
+        base_url = str(
+            getattr(config, "serper_base_url", "https://google.serper.dev")
+            or "https://google.serper.dev"
+        ).rstrip("/")
+        endpoint = str(getattr(config, "serper_endpoint", "search") or "search").strip("/")
+        url = f"{base_url}/{endpoint}"
+
+        payload = {"q": query, "num": max_results}
+        gl = getattr(config, "serper_gl", None)
+        hl = getattr(config, "serper_hl", None)
+        if gl:
+            payload["gl"] = gl
+        if hl:
+            payload["hl"] = hl
+
+        headers = {
+            "X-API-KEY": api_key,
+            "Content-Type": "application/json",
+        }
+
+        try:
+            if self.search_client:
+                resp = await self.search_client.post(
+                    url, headers=headers, json=payload, timeout=30.0
+                )
+            else:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.post(url, headers=headers, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as exc:
+            logger.warning(f"Serper search failed, falling back to DuckDuckGo: {exc}")
+            return await self._duckduckgo_search(query, max_results=max_results)
+
+        rows = data.get("organic") or data.get("news") or []
+        results = []
+        for row in rows[:max_results]:
+            url = row.get("link") or row.get("url") or ""
+            if not url:
+                continue
+            results.append(
+                {
+                    "title": row.get("title", ""),
+                    "url": url,
+                    "body": row.get("snippet") or row.get("description") or "",
+                }
+            )
+
+        return results
 
     @staticmethod
     def _parse_json_response(response: str) -> Optional[dict]:

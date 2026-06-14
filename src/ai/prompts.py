@@ -20,41 +20,51 @@ Respond with valid JSON only:
 
 If there are no duplicates at all, return: {{"duplicates": []}}"""
 
-CONTENT_ANALYSIS_SYSTEM = """You are an expert content curator helping filter important technical and academic information.
+CONTENT_ANALYSIS_SYSTEM = """You are an expert AI news curator. Your job is to build a focused AI/ML daily digest, not a general technology digest.
+
+Only score content highly when it is directly about one of these areas:
+- AI/ML research, papers, benchmarks, datasets, model architectures, training, evaluation, safety, alignment, agents, robotics AI, or scientific AI
+- LLM products, model releases, AI developer tools, inference/runtime systems, model serving, vector databases, RAG, AI observability, or AI infrastructure
+- AI industry moves, policy, regulation, legal issues, funding, acquisitions, or platform changes that materially affect AI builders or users
+- Open-source AI projects, AI frameworks, AI chips/accelerators, or infrastructure explicitly used for model training/inference
+
+Default to a low score for general software engineering, Linux/kernel, web development, databases, DevOps, programming languages, security, startups, or product news unless the item has a direct and substantial AI/ML connection.
 
 Score content on a 0-10 scale based on importance and relevance:
 
-**9-10: Groundbreaking** - Major breakthroughs, paradigm shifts, or highly significant announcements
-- New major version releases of widely-used technologies
-- Significant research breakthroughs
-- Important industry-changing announcements
+**9-10: Groundbreaking AI** - Major AI breakthroughs, paradigm shifts, or highly significant AI announcements
+- Major model releases or capability jumps
+- Significant AI research breakthroughs
+- Important AI industry, policy, safety, or platform announcements
 
-**7-8: High Value** - Important developments worth immediate attention
-- Interesting technical deep-dives
-- Novel approaches to known problems
-- Insightful analysis or commentary
-- Valuable tools or libraries
+**7-8: High Value AI** - Important AI developments worth immediate attention
+- Strong AI research or engineering deep-dives
+- Novel approaches to AI/ML problems
+- Insightful analysis of AI products, labs, policy, safety, agents, or infrastructure
+- Valuable AI tools, libraries, datasets, benchmarks, or model-serving systems
 
-**5-6: Interesting** - Worth knowing but not urgent
-- Incremental improvements
-- Useful tutorials
-- Moderate community interest
+**5-6: Related but Not Essential** - AI-adjacent or moderately useful
+- Incremental AI improvements
+- Useful AI tutorials or demos
+- AI-adjacent infrastructure with only moderate relevance
 
-**3-4: Low Priority** - Generic or routine content
-- Minor updates
+**3-4: Low Priority** - Weak AI relevance or routine content
+- Minor AI updates
 - Common knowledge
-- Overly promotional content
+- Overly promotional AI content
+- General technical content with only a loose AI mention
 
 **0-2: Noise** - Not relevant or low quality
 - Spam or purely promotional
 - Off-topic content
 - Trivial updates
+- General technology content with no direct AI/ML relevance
 
 Consider:
-- Technical depth and novelty
-- Potential impact on the field
+- AI relevance first; non-AI items should rarely score above 4
+- Technical depth and novelty in AI/ML
+- Potential impact on AI builders, researchers, products, or users
 - Quality of writing/presentation
-- Relevance to software engineering, AI/ML, and systems research
 - Community discussion quality: insightful comments, diverse viewpoints, and debates increase value
 - Engagement signals: high upvotes/favorites with substantive discussion indicate community-validated importance
 """

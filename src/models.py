@@ -108,6 +108,13 @@ class AIConfig(BaseModel):
     analysis_concurrency: int = 1
     enrichment_concurrency: int = 1
     languages: List[str] = Field(default_factory=lambda: ["en"])
+    search_provider: str = "duckduckgo"  # "duckduckgo" or "serper"
+    search_max_results: int = 3
+    serper_api_key_env: str = "SERPER_API_KEY"
+    serper_base_url: str = "https://google.serper.dev"
+    serper_endpoint: str = "search"
+    serper_gl: Optional[str] = None
+    serper_hl: Optional[str] = None
     # Azure OpenAI specific; required when provider == AZURE
     azure_endpoint_env: Optional[str] = None
     api_version: Optional[str] = None
@@ -189,13 +196,14 @@ class TelegramConfig(BaseModel):
 class TwitterConfig(BaseModel):
     """Twitter source configuration.
 
-    Two modes are supported:
+    Three modes are supported:
     - "apify": Use Apify scweet actor (requires APIFY_TOKEN, more reliable)
+    - "twitterapi_io": Use TwitterAPI.io REST API (requires TWITTERAPI_IO_KEY)
     - "playwright": Use Playwright + browser cookies (free, no token needed)
     """
 
     enabled: bool = True
-    mode: str = "apify"  # "apify" or "playwright"
+    mode: str = "apify"  # "apify", "twitterapi_io", or "playwright"
     users: List[str] = Field(default_factory=list)
     fetch_limit: int = 10
     fetch_reply_text: bool = False
@@ -205,6 +213,17 @@ class TwitterConfig(BaseModel):
     # Apify settings (used when mode == "apify")
     apify_token_env: str = "APIFY_TOKEN"
     actor_id: str = "altimis~scweet"
+    # TwitterAPI.io settings (used when mode == "twitterapi_io")
+    twitterapi_source: str = "auto"  # "auto", "users", or "list"
+    twitterapi_key_env: str = "TWITTERAPI_IO_KEY"
+    twitterapi_base_url: str = "https://api.twitterapi.io"
+    twitterapi_list_id: Optional[str] = None
+    twitterapi_list_id_env: str = "TWITTERAPI_LIST_ID"
+    twitterapi_include_replies: bool = False
+    twitterapi_request_interval_sec: float = 0.0
+    twitterapi_max_pages_per_user: int = 1
+    twitterapi_list_max_pages: int = 3
+    twitterapi_429_retries: int = 2
     # Playwright settings (used when mode == "playwright")
     cookie_dir: str = "data"
     cookie_file_pattern: str = "x_cookies_*.json"
@@ -361,6 +380,17 @@ class EmailConfig(BaseModel):
     enabled: bool = False
 
 
+class SinomisConfig(BaseModel):
+    """Sinomis AI daily news publishing configuration."""
+
+    enabled: bool = False
+    base_url: Optional[str] = None
+    import_path: str = "/api/internal/jobs/news/import"
+    management_api_key_env: str = "SINOMIS_MANAGEMENT_API_KEY"
+    language: str = "zh"
+    timeout_sec: float = 30.0
+
+
 class CategoryGroupConfig(BaseModel):
     """A quota group containing one or more source categories."""
 
@@ -372,7 +402,7 @@ class CategoryGroupConfig(BaseModel):
 class FilteringConfig(BaseModel):
     """Content filtering configuration."""
 
-    ai_score_threshold: float = 7.0
+    ai_score_threshold: float = 5.0
     time_window_hours: int = 24
     max_items: Optional[int] = Field(default=None, gt=0)
     category_groups: Dict[str, CategoryGroupConfig] = Field(default_factory=dict)
@@ -389,3 +419,4 @@ class Config(BaseModel):
     filtering: FilteringConfig
     email: Optional[EmailConfig] = None
     webhook: Optional[WebhookConfig] = None
+    sinomis: Optional[SinomisConfig] = None

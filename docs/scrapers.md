@@ -178,20 +178,32 @@ Behavior:
 
 ## Twitter
 
-**File**: `src/scrapers/twitter.py`
+**Files**: `src/scrapers/twitter.py`, `src/scrapers/twitterapi_io.py`, `src/scrapers/twitter_playwright.py`
 
-Uses the [Apify](https://apify.com) platform to bypass Twitter's anti-scraping measures. The actor `altimis~scweet` is called via the Apify REST API.
+Supports three modes:
 
-Flow:
+- `apify` uses the [Apify](https://apify.com) platform and the `altimis~scweet` actor.
+- `twitterapi_io` uses the TwitterAPI.io REST API.
+- `playwright` uses browser cookies through Playwright.
+
+Apify flow:
+
 1. POST to `/v2/acts/{actor_id}/runs` to trigger a run
 2. Poll `/v2/actor-runs/{run_id}` until status is `SUCCEEDED` or a terminal failure
 3. GET `/v2/datasets/{dataset_id}/items` to retrieve results
+
+TwitterAPI.io flow:
+
+1. GET `/twitter/user/last_tweets` once per configured user
+2. Pass the API key in the `X-API-Key` header
+3. Normalize returned tweets into the shared `ContentItem` model
 
 **Config** (`sources.twitter`):
 
 ```json
 {
   "enabled": true,
+  "mode": "twitterapi_io",
   "users": ["karpathy", "ylecun"],
   "fetch_limit": 10,
   "fetch_reply_text": false,
@@ -199,19 +211,40 @@ Flow:
   "max_tweets_to_expand": 10,
   "reply_min_likes": 5,
   "actor_id": "altimis~scweet",
-  "apify_token_env": "APIFY_TOKEN"
+  "apify_token_env": "APIFY_TOKEN",
+  "twitterapi_source": "auto",
+  "twitterapi_key_env": "TWITTERAPI_IO_KEY",
+  "twitterapi_base_url": "https://api.twitterapi.io",
+  "twitterapi_list_id": null,
+  "twitterapi_list_id_env": "TWITTERAPI_LIST_ID",
+  "twitterapi_include_replies": false,
+  "twitterapi_request_interval_sec": 2.0,
+  "twitterapi_max_pages_per_user": 1,
+  "twitterapi_list_max_pages": 3,
+  "twitterapi_429_retries": 2
 }
 ```
 
+- `mode` — `apify`, `twitterapi_io`, or `playwright`
 - `users` — Twitter screen names to monitor, without the `@` prefix
-- `fetch_limit` — maximum tweets to fetch per run
+- `fetch_limit` — maximum tweets returned to the pipeline per run. In `twitterapi_io` mode requests are made per configured user, then results are sorted and capped globally.
 - `fetch_reply_text` — when `true`, a second Apify run fetches reply bodies for each important tweet and appends them under `--- Top Comments ---` for AI analysis
 - `max_replies_per_tweet` — maximum reply lines per tweet (sorted by engagement score)
 - `max_tweets_to_expand` — cap on reply expansion runs per pipeline cycle, to control Apify credit usage
 - `reply_min_likes` — minimum likes required for a reply to be included
 - `actor_id` — Apify actor ID (default: `altimis~scweet`)
 - `apify_token_env` — environment variable name containing the Apify API token
+- `twitterapi_source` — `auto`, `users`, or `list`. `auto` uses list timeline when a list id is configured; otherwise it uses per-user latest tweets.
+- `twitterapi_key_env` — environment variable name containing the TwitterAPI.io key
+- `twitterapi_base_url` — TwitterAPI.io API base URL
+- `twitterapi_list_id` — optional X/Twitter list id for TwitterAPI.io list timeline mode
+- `twitterapi_list_id_env` — environment variable containing the list id
+- `twitterapi_include_replies` — include replies in TwitterAPI.io latest-tweets responses
+- `twitterapi_request_interval_sec` — pause between user timeline requests to reduce 429 risk
+- `twitterapi_max_pages_per_user` — maximum timeline pages fetched per user per run
+- `twitterapi_list_max_pages` — maximum list timeline pages fetched per run
+- `twitterapi_429_retries` — retry count for 429 responses, honoring `Retry-After` when present
 
-**Authentication**: Set `APIFY_TOKEN` in your `.env`. Get a token at [console.apify.com](https://console.apify.com/account/integrations).
+**Authentication**: Set `APIFY_TOKEN` in your `.env` for Apify mode, or `TWITTERAPI_IO_KEY` for TwitterAPI.io mode.
 
-**Extracted data**: tweet text, URL, author, publish time, likes, retweets, replies, views, and (optionally) reply-thread text appended under `--- Top Comments ---`.
+**Extracted data**: tweet text, URL, author, publish time, likes, retweets, replies, quotes, views, bookmarks, language, and (in Apify mode) optional reply-thread text appended under `--- Top Comments ---`.

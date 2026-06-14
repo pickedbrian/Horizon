@@ -121,7 +121,7 @@ def print_config_template():
     ]
   },
   "filtering": {
-    "ai_score_threshold": 7.0,
+    "ai_score_threshold": 5.0,
     "time_window_hours": 24,
     "max_items": null,
     "category_groups": {},

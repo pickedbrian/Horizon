@@ -8,7 +8,14 @@
     "max_tokens": 4096,
     "throttle_sec": 0,
     "analysis_concurrency": 1,
-    "enrichment_concurrency": 1
+    "enrichment_concurrency": 1,
+    "search_provider": "duckduckgo",
+    "search_max_results": 3,
+    "serper_api_key_env": "SERPER_API_KEY",
+    "serper_base_url": "https://google.serper.dev",
+    "serper_endpoint": "search",
+    "serper_gl": null,
+    "serper_hl": null
   },
   "email": {
     "enabled": false,
@@ -20,6 +27,14 @@
     "sender_name": "Horizon Daily",
     "subscribe_keyword": "SUBSCRIBE",
     "unsubscribe_keyword": "UNSUBSCRIBE"
+  },
+  "sinomis": {
+    "enabled": false,
+    "base_url": "${SINOMIS_AI_BASE_URL}",
+    "import_path": "/api/internal/jobs/news/import",
+    "management_api_key_env": "SINOMIS_MANAGEMENT_API_KEY",
+    "language": "zh",
+    "timeout_sec": 30
   },
   "sources": {
     "github": [
@@ -78,12 +93,25 @@
     },
     "twitter": {
       "enabled": false,
+      "mode": "apify",
       "users": ["karpathy", "ylecun"],
       "fetch_limit": 10,
       "fetch_reply_text": false,
       "max_replies_per_tweet": 3,
       "max_tweets_to_expand": 10,
-      "reply_min_likes": 5
+      "reply_min_likes": 5,
+      "apify_token_env": "APIFY_TOKEN",
+      "actor_id": "altimis~scweet",
+      "twitterapi_source": "auto",
+      "twitterapi_key_env": "TWITTERAPI_IO_KEY",
+      "twitterapi_base_url": "https://api.twitterapi.io",
+      "twitterapi_list_id": null,
+      "twitterapi_list_id_env": "TWITTERAPI_LIST_ID",
+      "twitterapi_include_replies": false,
+      "twitterapi_request_interval_sec": 2.0,
+      "twitterapi_max_pages_per_user": 1,
+      "twitterapi_list_max_pages": 3,
+      "twitterapi_429_retries": 2
     },
     "openbb": {
       "enabled": false,
@@ -110,7 +138,7 @@
     }
   },
   "filtering": {
-    "ai_score_threshold": 6.0,
+    "ai_score_threshold": 5.0,
     "time_window_hours": 24,
     "max_items": null,
     "category_groups": {},

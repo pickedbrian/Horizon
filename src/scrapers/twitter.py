@@ -69,14 +69,17 @@ class TwitterScraper(BaseScraper):
         self, token: str, users: List[str]
     ) -> tuple[Optional[str], Optional[str]]:
         payload = {
-            "source_mode": "profiles",
-            "profile_urls": users,
+            "source_mode": "search",
+            "from_users": users,
             "search_sort": "Latest",
+            "tweet_type": "all",
             "max_items": max(100, self.config.fetch_limit),
         }
-        url = f"{_APIFY_BASE}/acts/{self.config.actor_id}/runs?token={token}"
+        url = f"{_APIFY_BASE}/acts/{self.config.actor_id}/runs"
         try:
-            resp = await self.client.post(url, json=payload, timeout=30.0)
+            resp = await self.client.post(
+                url, json=payload, headers=self._auth_headers(token), timeout=30.0
+            )
             resp.raise_for_status()
             data = resp.json()["data"]
             run_id = data["id"]
@@ -88,11 +91,13 @@ class TwitterScraper(BaseScraper):
             return None, None
 
     async def _wait_for_run(self, token: str, run_id: str) -> bool:
-        url = f"{_APIFY_BASE}/actor-runs/{run_id}?token={token}"
+        url = f"{_APIFY_BASE}/actor-runs/{run_id}"
         elapsed = 0.0
         while elapsed < _MAX_WAIT:
             try:
-                resp = await self.client.get(url, timeout=10.0)
+                resp = await self.client.get(
+                    url, headers=self._auth_headers(token), timeout=10.0
+                )
                 resp.raise_for_status()
                 status = resp.json()["data"]["status"]
                 if status == "SUCCEEDED":
@@ -108,9 +113,11 @@ class TwitterScraper(BaseScraper):
         return False
 
     async def _fetch_dataset(self, token: str, dataset_id: str) -> list:
-        url = f"{_APIFY_BASE}/datasets/{dataset_id}/items?token={token}"
+        url = f"{_APIFY_BASE}/datasets/{dataset_id}/items"
         try:
-            resp = await self.client.get(url, timeout=30.0)
+            resp = await self.client.get(
+                url, headers=self._auth_headers(token), timeout=30.0
+            )
             resp.raise_for_status()
             return resp.json()
         except Exception as exc:
@@ -142,9 +149,11 @@ class TwitterScraper(BaseScraper):
             "max_items": max_items,
         }
 
-        url = f"{_APIFY_BASE}/acts/{self.config.actor_id}/runs?token={token}"
+        url = f"{_APIFY_BASE}/acts/{self.config.actor_id}/runs"
         try:
-            resp = await self.client.post(url, json=payload, timeout=30.0)
+            resp = await self.client.post(
+                url, json=payload, headers=self._auth_headers(token), timeout=30.0
+            )
             resp.raise_for_status()
             data = resp.json()["data"]
             run_id = data["id"]
@@ -201,6 +210,10 @@ class TwitterScraper(BaseScraper):
 
         candidates.sort(key=lambda x: x[0], reverse=True)
         return [line for _, line in candidates[:max_replies]]
+
+    @staticmethod
+    def _auth_headers(token: str) -> dict:
+        return {"Authorization": f"Bearer {token}"}
 
     @staticmethod
     def append_discussion_content(item: ContentItem, reply_lines: List[str]) -> bool:
@@ -276,7 +289,7 @@ class TwitterScraper(BaseScraper):
                 return None
             text = unescape(text)
 
-            url = item.get("url")
+            url = item.get("url") or item.get("tweet_url")
             if not url:
                 permalink = item.get("permalink")
                 if permalink and screen_name != "unknown":

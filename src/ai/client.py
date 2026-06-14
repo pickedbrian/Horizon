@@ -3,7 +3,9 @@
 import os
 import re
 from abc import ABC, abstractmethod
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
+import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from anthropic import AsyncAnthropic
 from google import genai
@@ -201,6 +203,8 @@ class OpenAIClient(AIClient):
         self.temperature = config.temperature
         self.max_tokens = config.max_tokens
         self.provider = config.provider.value
+        self.api_key = api_key
+        self.base_url = base_url
         # Some newer models (e.g. Claude Opus 4.7 on Bedrock Converse) reject
         # `temperature`. We learn this on first 400 and stop sending it.
         self._supports_temperature = True
@@ -282,7 +286,39 @@ class OpenAIClient(AIClient):
             request_kwargs["temperature"] = temperature
         if self.provider not in self._NO_RESPONSE_FORMAT:
             request_kwargs["response_format"] = {"type": "json_object"}
+        if self.provider == "openai" and self.base_url:
+            return await self._do_httpx_request(request_kwargs)
         return await self.client.chat.completions.create(**request_kwargs)
+
+    async def _do_httpx_request(self, request_kwargs: dict):
+        """Call OpenAI-compatible gateways without SDK-specific headers."""
+        url = self.base_url.rstrip("/") + "/chat/completions"
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=request_kwargs,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        usage_data = data.get("usage") or {}
+        choice = (data.get("choices") or [{}])[0]
+        message = choice.get("message") or {}
+        return SimpleNamespace(
+            usage=SimpleNamespace(
+                prompt_tokens=usage_data.get("prompt_tokens", 0),
+                completion_tokens=usage_data.get("completion_tokens", 0),
+            ),
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=message.get("content", ""))
+                )
+            ],
+        )
 
     @staticmethod
     def _is_temperature_unsupported(message: str) -> bool:

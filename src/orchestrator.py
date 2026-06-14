@@ -12,6 +12,7 @@ from rich.console import Console
 from .models import Config, ContentItem
 from .storage.manager import StorageManager
 from .services.email import EmailManager
+from .services.sinomis import SinomisPublisher
 from .services.webhook import WebhookNotifier
 from .scrapers.github import GitHubScraper
 from .scrapers.hackernews import HackerNewsScraper
@@ -19,6 +20,7 @@ from .scrapers.rss import RSSScraper
 from .scrapers.reddit import RedditScraper
 from .scrapers.telegram import TelegramScraper
 from .scrapers.twitter import TwitterScraper
+from .scrapers.twitterapi_io import TwitterAPIIOScraper
 from .scrapers.twitter_playwright import TwitterPlaywrightScraper
 from .scrapers.openbb import OpenBBScraper
 from .scrapers.ossinsight import OSSInsightScraper
@@ -54,6 +56,11 @@ class HorizonOrchestrator:
         self.storage = storage
         self.console = Console()
         self.email_manager = EmailManager(config.email, console=self.console) if config.email else None
+        self.sinomis_publisher = (
+            SinomisPublisher(config.sinomis, console=self.console)
+            if config.sinomis and config.sinomis.enabled
+            else None
+        )
         self.webhook_notifier = (
             WebhookNotifier(config.webhook, console=self.console)
             if config.webhook and config.webhook.enabled
@@ -145,6 +152,11 @@ class HorizonOrchestrator:
 
             # 7. Generate and save daily summaries for each configured language
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            issue_type = (
+                "weekly"
+                if (force_hours or self.config.filtering.time_window_hours) >= 168
+                else "daily"
+            )
             for lang in self.config.ai.languages:
                 summarizer = DailySummarizer()
                 summary = await summarizer.generate_summary(important_items, today, len(all_items), language=lang)
@@ -187,6 +199,15 @@ class HorizonOrchestrator:
                     self.console.print(f"📄 Copied {lang.upper()} summary to GitHub Pages: {dest_path}\n")
                 except Exception as e:
                     self.console.print(f"[yellow]⚠️  Failed to copy {lang.upper()} summary to docs/: {e}[/yellow]\n")
+
+                # Publish to Sinomis AI if configured
+                if self.sinomis_publisher:
+                    await self.sinomis_publisher.publish_daily_summary(
+                        date=today,
+                        markdown=summary,
+                        language=lang,
+                        issue_type=issue_type,
+                    )
 
                 # Send email if configured
                 if self.email_manager and self.config.email and self.config.email.enabled:
@@ -281,11 +302,13 @@ class HorizonOrchestrator:
                 telegram_scraper = TelegramScraper(self.config.sources.telegram, client)
                 tasks.append(self._fetch_with_progress("Telegram", telegram_scraper, since))
 
-            # Twitter (Apify or Playwright mode)
+            # Twitter (Apify, TwitterAPI.io, or Playwright mode)
             if self.config.sources.twitter and self.config.sources.twitter.enabled:
                 tw_cfg = self.config.sources.twitter
                 if tw_cfg.mode == "playwright":
                     twitter_scraper = TwitterPlaywrightScraper(tw_cfg)
+                elif tw_cfg.mode == "twitterapi_io":
+                    twitter_scraper = TwitterAPIIOScraper(tw_cfg, client)
                 else:
                     twitter_scraper = TwitterScraper(tw_cfg, client)
                 tasks.append(self._fetch_with_progress("Twitter", twitter_scraper, since))
@@ -623,6 +646,11 @@ class HorizonOrchestrator:
             if tw_cfg.mode == "playwright":
                 self.console.print(
                     "   [yellow]Reply expansion not yet supported in Playwright mode.[/yellow]"
+                )
+                return
+            if tw_cfg.mode == "twitterapi_io":
+                self.console.print(
+                    "   [yellow]Reply expansion not yet supported in TwitterAPI.io mode.[/yellow]"
                 )
                 return
             scraper = TwitterScraper(tw_cfg, client)

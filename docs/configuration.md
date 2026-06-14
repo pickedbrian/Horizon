@@ -159,6 +159,31 @@ By default, AI scoring and enrichment run one item at a time. If your API endpoi
 - Result ordering is preserved regardless of concurrency.
 - If you also use `throttle_sec`, each concurrent task sleeps independently after finishing an item.
 
+### Enrichment Web Search
+
+During enrichment, Horizon asks AI to extract concepts and then searches the web for grounding context. By default it uses DuckDuckGo through `ddgs`; you can switch to Serper.dev:
+
+```json
+{
+  "ai": {
+    "search_provider": "serper",
+    "search_max_results": 3,
+    "serper_api_key_env": "SERPER_API_KEY",
+    "serper_base_url": "https://google.serper.dev",
+    "serper_endpoint": "search",
+    "serper_gl": null,
+    "serper_hl": null
+  }
+}
+```
+
+- `search_provider`: `duckduckgo` or `serper`. Unknown values fall back to DuckDuckGo.
+- `search_max_results`: Number of search results passed into the enrichment prompt per query. Default is `3`.
+- `serper_api_key_env`: Environment variable containing the Serper.dev API key. Default is `SERPER_API_KEY`.
+- `serper_base_url`: Serper API base URL. Default is `https://google.serper.dev`.
+- `serper_endpoint`: Serper endpoint to call. Use `search` for general Google Search or `news` for Google News-shaped results.
+- `serper_gl` / `serper_hl`: Optional Google country/language parameters sent to Serper. Leave as `null` for Serper defaults.
+
 **Custom Base URL** (for proxies):
 
 ```json
@@ -286,32 +311,58 @@ Telegram scraping uses the public web preview at `https://t.me/s/<channel>`, so 
 
 ### Twitter
 
-Requires an [Apify](https://apify.com) account. Set `APIFY_TOKEN` in your `.env` file. The free tier includes $5/month of credit, enough for roughly 20,000 tweets.
+Supports three modes:
+
+- `apify` — uses the Apify `altimis/scweet` actor. Set `APIFY_TOKEN` in your `.env`.
+- `twitterapi_io` — uses the TwitterAPI.io REST API. Set `TWITTERAPI_IO_KEY` in your `.env`.
+- `playwright` — uses Playwright with browser cookies.
 
 ```json
 {
   "sources": {
     "twitter": {
       "enabled": true,
+      "mode": "twitterapi_io",
       "users": ["karpathy", "ylecun"],
       "fetch_limit": 10,
       "fetch_reply_text": false,
       "max_replies_per_tweet": 3,
       "max_tweets_to_expand": 10,
-      "reply_min_likes": 5
+      "reply_min_likes": 5,
+      "twitterapi_source": "auto",
+      "twitterapi_key_env": "TWITTERAPI_IO_KEY",
+      "twitterapi_base_url": "https://api.twitterapi.io",
+      "twitterapi_list_id": null,
+      "twitterapi_list_id_env": "TWITTERAPI_LIST_ID",
+      "twitterapi_include_replies": false,
+      "twitterapi_request_interval_sec": 2.0,
+      "twitterapi_max_pages_per_user": 1,
+      "twitterapi_list_max_pages": 3,
+      "twitterapi_429_retries": 2
     }
   }
 }
 ```
 
+- `mode` — `apify`, `twitterapi_io`, or `playwright` (default: `apify`)
 - `users` — Twitter screen names to monitor, without the `@` prefix
-- `fetch_limit` — maximum tweets to fetch per run (across all users combined; minimum 100 due to actor constraint)
-- `fetch_reply_text` — when `true`, fetch actual reply bodies for important tweets and append them under `--- Top Comments ---` so the AI can factor in community discussion. Disabled by default.
+- `fetch_limit` — maximum tweets returned to the pipeline per run. In `twitterapi_io` mode the API is queried per configured user, then results are sorted and capped globally.
+- `fetch_reply_text` — when `true`, fetch actual reply bodies for important tweets and append them under `--- Top Comments ---` so the AI can factor in community discussion. Currently supported in `apify` mode.
 - `max_replies_per_tweet` — maximum reply lines to append per tweet (default: 3)
 - `max_tweets_to_expand` — cap on how many tweets get reply expansion per run, to control Apify credit usage (default: 10)
 - `reply_min_likes` — only include replies with at least this many likes (default: 0)
+- `twitterapi_source` — `auto`, `users`, or `list`. `auto` uses list timeline when a list id is configured; otherwise it uses per-user latest tweets.
+- `twitterapi_key_env` — environment variable containing the TwitterAPI.io key (default: `TWITTERAPI_IO_KEY`)
+- `twitterapi_base_url` — TwitterAPI.io API base URL (default: `https://api.twitterapi.io`)
+- `twitterapi_list_id` — optional X/Twitter list id for TwitterAPI.io list timeline mode
+- `twitterapi_list_id_env` — environment variable containing the list id (default: `TWITTERAPI_LIST_ID`)
+- `twitterapi_include_replies` — include replies in the TwitterAPI.io latest-tweets request (default: `false`)
+- `twitterapi_request_interval_sec` — pause between user timeline requests to reduce 429 risk (default: `0.0`)
+- `twitterapi_max_pages_per_user` — maximum timeline pages fetched per user per run (default: `1`)
+- `twitterapi_list_max_pages` — maximum list timeline pages fetched per run (default: `3`)
+- `twitterapi_429_retries` — retry count for 429 responses, honoring `Retry-After` when present (default: `2`)
 
-The scraper uses the `altimis/scweet` actor by default. You can override it with `actor_id` if needed.
+Apify mode uses the `altimis/scweet` actor by default. You can override it with `actor_id` if needed.
 
 ### OpenBB Financial News
 
@@ -399,23 +450,18 @@ Content is scored 0-10:
 ```json
 {
   "filtering": {
-    "ai_score_threshold": 7.0,
+    "ai_score_threshold": 5.0,
     "time_window_hours": 24,
     "max_items": 20,
     "category_groups": {
       "ai": {
         "name": "AI / Machine Learning",
-        "limit": 5,
+        "limit": 10,
         "categories": ["ai-news", "ai-tools", "machine-learning", "llm"]
-      },
-      "finance": {
-        "name": "Finance",
-        "limit": 5,
-        "categories": ["finance", "equities", "crypto"]
       }
     },
     "default_group": "other",
-    "default_group_limit": 3
+    "default_group_limit": 1
   }
 }
 ```

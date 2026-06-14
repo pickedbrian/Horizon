@@ -39,6 +39,7 @@ twitter = [
 [project.scripts]
 horizon = "src.main:main"
 horizon-mcp = "src.mcp.server:main"
+horizon-sinomis = "src.services.sinomis_cli:main"
 horizon-wizard = "src.setup.wizard:main"
 horizon-webhook = "src.services.webhook_cli:main"
 

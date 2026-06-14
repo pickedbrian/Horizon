@@ -39,7 +39,7 @@ LABELS = {
         ),
     },
     "zh": {
-        "header": "Horizon 每日速递",
+        "header": "Sinomis AI 每日速递",
         "source": "来源",
         "background": "背景",
         "discussion": "社区讨论",
